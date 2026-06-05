@@ -26,21 +26,52 @@ cloudinary.config({
 const storage = multer.memoryStorage();
 const upload = multer({ storage });
 
-// Connect to MongoDB
-mongoose.connect(process.env.MONGODB_URI)
-  .then(() => console.log(' Connected to MongoDB'))
-  .catch((err) => console.error(' MongoDB connection error:', err));
+
+// ─── SERVERLESS MONGODB CACHED CONNECTION COUPLING ───
+let cachedConnection = null;
+
+async function connectToDatabase() {
+  // If connection exists in the serverless instance container memory, reuse it
+  if (cachedConnection) return cachedConnection;
+
+  // Fallback check if mongoose is already connected via readyState
+  if (mongoose.connection.readyState === 1) {
+    cachedConnection = mongoose.connection;
+    return cachedConnection;
+  }
+
+  try {
+    console.log('🔄 Connecting to MongoDB Atlas...');
+    // serverSelectionTimeoutMS limits hanging to 5s so function execution doesn't bleed out
+    cachedConnection = await mongoose.connect(process.env.MONGODB_URI, {
+      serverSelectionTimeoutMS: 5000,
+    });
+    console.log(' Connected to MongoDB');
+    return cachedConnection;
+  } catch (err) {
+    console.error('❌ MongoDB connection error:', err);
+    throw err;
+  }
+}
+
+// Global Middleware: Forces the route runner to wait for DB connection handshake completion
+app.use(async (req, res, next) => {
+  try {
+    await connectToDatabase();
+    next();
+  } catch (error) {
+    res.status(500).json({ error: 'Database connection failed' });
+  }
+});
+
 
 // ─── CLOUDINARY CONNECTION TEST ───
+// Wrapped in try/catch to avoid freezing server processes if cloud pings delay
 cloudinary.api.ping()
   .then(res => {
-    if (res.status === 'ok') {
-      console.log(' Connected to Cloudinary');
-    }
+    if (res.status === 'ok') console.log(' Connected to Cloudinary');
   })
-  .catch(err => {
-    console.error(' Cloudinary connection error:', err.message);
-  })
+  .catch(err => console.error(' Cloudinary connection error:', err.message));
 
 // Helper function to upload buffer to Cloudinary
 const uploadToCloudinary = (fileBuffer, folderName, mimeType = 'image/jpeg') => {
@@ -87,14 +118,12 @@ app.post('/upload/room', upload.fields([
       return res.status(400).json({ error: 'Base image is required' });
     }
 
-    // 1. Upload Base Image
     const previewUrl = await uploadToCloudinary(
       req.files.baseImage[0].buffer, 
       'wonderfloor/rooms',
       req.files.baseImage[0].mimetype  
     );
     
-    // 2. Upload Mask Image (if provided) - FIXED: properly scoped let
     let maskUrl = null; 
     if (req.files.maskImage) {
       maskUrl = await uploadToCloudinary(
@@ -104,10 +133,8 @@ app.post('/upload/room', upload.fields([
       );
     }
 
-    // 3. Parse collections array
     const collections = req.body.supportedCollections ? JSON.parse(req.body.supportedCollections) : [];
 
-    // 4. Save to MongoDB
     const newRoom = new Room({
       name: req.body.name,
       category: req.body.category,
@@ -189,8 +216,12 @@ app.get('/dashboard-stats', async (req, res) => {
   }
 });
 
+// ─── ADD A ROOT WELCOME STATUS ROUTE ───
+app.get('/', (req, res) => {
+  res.status(200).json({ API: "Online", platform: "Wonderfloor Serverless API" });
+});
+
 // ─── MODIFIED FOR VERCEL ───
-// Only spin up the server listener if we are running locally
 if (process.env.NODE_ENV !== 'production') {
   const PORT = process.env.PORT || 8000;
   app.listen(PORT, () => {
@@ -198,5 +229,4 @@ if (process.env.NODE_ENV !== 'production') {
   });
 }
 
-// Export the app for Vercel Serverless Functionality
 module.exports = app;
