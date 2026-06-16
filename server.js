@@ -16,6 +16,16 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
 
+function safeParseJSON(data) {
+  if (!data) return [];
+  if (typeof data !== 'string') return data; 
+  try {
+    return JSON.parse(data);
+  } catch (error) {
+    console.warn("⚠️ Could not parse JSON, falling back to string split:", data);
+    return data.replace(/[\[\]\\"]/g, '').split(',').map(s => s.trim()).filter(Boolean);
+  }
+}
 
 // Configure Cloudinary
 // ✅ FIX 1: Added timeout — prevents the 499 TimeoutError on large files
@@ -153,29 +163,31 @@ app.get('/sign-upload', (req, res) => {
 // Accepts two upload paths:
 //   1. imageUrl in body  -> browser uploaded directly to Cloudinary; just save URL.
 //   2. tileImage file    -> fallback server-side upload (used by bulk-upload route).
+// ─── UPLOAD TILE (PRODUCT) ───────────────────────────────────────────────────
 app.post('/upload/product', upload.single('tileImage'), async (req, res) => {
   try {
     let imageUrl;
 
     if (req.body.imageUrl) {
-      // Primary path: direct browser->Cloudinary upload, URL passed in body
       imageUrl = req.body.imageUrl;
     } else if (req.file) {
-      // Fallback: server uploads the file (e.g. bulk upload)
       imageUrl = await uploadToCloudinary(req.file.buffer, 'wonderfloor/tiles');
     } else {
       return res.status(400).json({ error: 'No tile image provided' });
     }
 
-    const industries = req.body.userIndustry ? JSON.parse(req.body.userIndustry) : [];
-    // NEW: Parse tags from FormData
-    const tagsArray = req.body.tags ? JSON.parse(req.body.tags) : [];
-    // Strip imageUrl out of the spread so it doesn't land on the Product doc
+    // 👇 USE THE SAFE PARSER HERE 👇
+    const industries = safeParseJSON(req.body.userIndustry);
+    const applicationArea = safeParseJSON(req.body.applicationArea);
+    const tagsArray = safeParseJSON(req.body.tags);
+    // 👆 ---------------------- 👆
+    
     const { imageUrl: _ignored, ...restBody } = req.body;
 
     const newProduct = new Product({
       ...restBody,
       userIndustry: industries,
+      applicationArea: applicationArea, 
       tags: tagsArray,
       img: imageUrl,
     });
@@ -428,12 +440,14 @@ app.patch('/products/:id', upload.single('tileImage'), async (req, res) => {
     let updateData = { ...req.body };
 
     // 1. Parse stringified array from FormData if it exists
-    if (req.body.userIndustry) {
-      updateData.userIndustry = JSON.parse(req.body.userIndustry);
+   if (req.body.userIndustry !== undefined) {
+      updateData.userIndustry = safeParseJSON(req.body.userIndustry);
     }
-    // NEW: Parse tags array for edits
-    if (req.body.tags) {
-      updateData.tags = JSON.parse(req.body.tags);
+    if (req.body.applicationArea !== undefined) {
+      updateData.applicationArea = safeParseJSON(req.body.applicationArea); 
+    }
+    if (req.body.tags !== undefined) {
+      updateData.tags = safeParseJSON(req.body.tags);
     }
     // 2. If a new file is provided, upload it to Cloudinary and update the image property
     if (req.file) {
