@@ -10,7 +10,7 @@ const productSchema = new mongoose.Schema({
   shade: { type: String, required: true },
   description: { type: String },
   userIndustry: [{ type: String }],
-
+  applicationArea: [{ type: String }],
   // Searchable Tags Array
   tags: [{ type: String }],
 
