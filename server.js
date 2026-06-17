@@ -4,6 +4,7 @@ const mongoose = require('mongoose');
 const cors = require('cors');
 const multer = require('multer');
 const cloudinary = require('cloudinary').v2;
+const path = require('path'); // ◄ EXACT CHANGE: Imported path module for handling file directories
 
 const Product = require('./models/Product');
 const Room = require('./models/Room');
@@ -28,21 +29,17 @@ function safeParseJSON(data) {
 }
 
 // Configure Cloudinary
-// ✅ FIX 1: Added timeout — prevents the 499 TimeoutError on large files
 cloudinary.config({
   cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
   api_key: process.env.CLOUDINARY_API_KEY,
   api_secret: process.env.CLOUDINARY_API_SECRET,
-  timeout: 120_000, // 120 s — gives Cloudinary enough time even on slow connections
+  timeout: 120_000, 
 });
 
-// ✅ FIX 2: Added fileSize limit to multer so oversized files are rejected fast
-//    rather than timing out silently after a long upload.
-//    10 MB is generous for a tile texture; adjust down if you want stricter enforcement.
 const storage = multer.memoryStorage();
 const upload = multer({
   storage,
-  limits: { fileSize: 10 * 1024 * 1024 }, // 10 MB hard cap
+  limits: { fileSize: 10 * 1024 * 1024 }, 
 });
 
 
@@ -70,7 +67,7 @@ async function connectToDatabase() {
   }
 }
 
-// Global Middleware: Forces the route runner to wait for DB connection handshake completion
+// Global Middleware
 app.use(async (req, res, next) => {
   try {
     await connectToDatabase();
@@ -90,16 +87,6 @@ cloudinary.api.ping()
   .catch(err => console.error('❌ Cloudinary connection error:', err.message));
 
 
-// ✅ FIX 3: Replaced base64 helper with upload_stream.
-//
-//  OLD approach (causes timeouts):
-//    const b64 = Buffer.from(fileBuffer).toString("base64");       // bloats size ~33%
-//    const dataURI = `data:${mimeType};base64,` + b64;
-//    cloudinary.uploader.upload(dataURI, options, callback);       // sends inflated string
-//
-//  NEW approach (fast, memory-efficient):
-//    pipe the raw buffer directly into a Cloudinary upload stream.
-//    No base64 conversion = smaller payload, lower latency, no timeout.
 const uploadToCloudinary = (fileBuffer, folderName, mimeType = 'image/jpeg') => {
   return new Promise((resolve, reject) => {
     const stream = cloudinary.uploader.upload_stream(
@@ -110,7 +97,6 @@ const uploadToCloudinary = (fileBuffer, folderName, mimeType = 'image/jpeg') => 
       }
     );
 
-    // Push the buffer into the stream and signal end-of-data
     const { Readable } = require('stream');
     const readable = new Readable();
     readable._read = () => { };
@@ -127,10 +113,7 @@ app.get('/', (req, res) => {
 });
 
 
-// ─── CLOUDINARY SIGNED UPLOAD TOKEN ───────────────────────────────────────────
-// The frontend calls this first, gets a short-lived signature, then uploads the
-// image file DIRECTLY from the browser to Cloudinary — skipping this server
-// entirely. This eliminates the server→Cloudinary hop that was causing 499s.
+// ─── CLOUDINARY SIGNED UPLOAD TOKEN ───
 app.get('/sign-upload', (req, res) => {
   try {
     const timestamp = Math.round(Date.now() / 1000);
@@ -159,11 +142,6 @@ app.get('/sign-upload', (req, res) => {
 //  PRODUCT ROUTES
 // ══════════════════════════════════════════════
 
-// ─── UPLOAD TILE (PRODUCT) ───────────────────────────────────────────────────
-// Accepts two upload paths:
-//   1. imageUrl in body  -> browser uploaded directly to Cloudinary; just save URL.
-//   2. tileImage file    -> fallback server-side upload (used by bulk-upload route).
-// ─── UPLOAD TILE (PRODUCT) ───────────────────────────────────────────────────
 app.post('/upload/product', upload.single('tileImage'), async (req, res) => {
   try {
     let imageUrl;
@@ -176,11 +154,9 @@ app.post('/upload/product', upload.single('tileImage'), async (req, res) => {
       return res.status(400).json({ error: 'No tile image provided' });
     }
 
-    // 👇 USE THE SAFE PARSER HERE 👇
     const industries = safeParseJSON(req.body.userIndustry);
     const applicationArea = safeParseJSON(req.body.applicationArea);
     const tagsArray = safeParseJSON(req.body.tags);
-    // 👆 ---------------------- 👆
     
     const { imageUrl: _ignored, ...restBody } = req.body;
 
@@ -195,7 +171,6 @@ app.post('/upload/product', upload.single('tileImage'), async (req, res) => {
 
     res.status(201).json({ success: true, product: newProduct });
   } catch (error) {
-    // Friendly duplicate-SKU error
     if (error.code === 11000 && error.keyPattern && error.keyPattern.sku) {
       return res.status(409).json({
         error: 'SKU "' + error.keyValue.sku + '" already exists. Please use a different SKU code.'
@@ -206,25 +181,19 @@ app.post('/upload/product', upload.single('tileImage'), async (req, res) => {
   }
 });
 
-// ─── FETCH ALL PRODUCTS ───
 app.get('/products', async (req, res) => {
   try {
     const products = await Product.find().sort({ createdAt: -1 }).lean();
-
-    // ── NORMALIZE: old docs without isVisible field get treated as visible ──
-    // Mongoose casts missing Boolean fields to false — this corrects that
     const normalized = products.map(p => ({
       ...p,
-      isVisible: p.isVisible !== false  // undefined → true, false → false, true → true
+      isVisible: p.isVisible !== false  
     }));
-
     res.status(200).json(normalized);
   } catch (error) {
     res.status(500).json({ error: 'Failed to fetch products' });
   }
 });
 
-// ─── FETCH SINGLE PRODUCT BY ID ───
 app.get('/products/:id', async (req, res) => {
   try {
     const product = await Product.findById(req.params.id);
@@ -238,10 +207,6 @@ app.get('/products/:id', async (req, res) => {
   }
 });
 
-// ─── TOGGLE PRODUCT VISIBILITY ───
-// Flips isVisible between true ↔ false for a single product.
-// Old documents that pre-date this field will have isVisible=undefined,
-// which we treat as true (visible), so the first toggle correctly hides them.
 app.patch('/products/:id/visibility', async (req, res) => {
   try {
     const product = await Product.findById(req.params.id);
@@ -263,7 +228,6 @@ app.patch('/products/:id/visibility', async (req, res) => {
 //  ROOM ROUTES
 // ══════════════════════════════════════════════
 
-// ─── UPLOAD ROOM (BASE + MASK) ───
 app.post('/upload/room', upload.fields([
   { name: 'baseImage', maxCount: 1 },
   { name: 'maskImage', maxCount: 1 }
@@ -308,7 +272,6 @@ app.post('/upload/room', upload.fields([
   }
 });
 
-// ─── FETCH ALL ROOMS ───
 app.get('/rooms', async (req, res) => {
   try {
     const rooms = await Room.find().sort({ createdAt: -1 });
@@ -318,7 +281,6 @@ app.get('/rooms', async (req, res) => {
   }
 });
 
-// ─── FETCH SINGLE ROOM BY ID ───
 app.get('/rooms/:id', async (req, res) => {
   try {
     const room = await Room.findById(req.params.id);
@@ -388,7 +350,7 @@ if (process.env.NODE_ENV !== 'production') {
   });
 }
 
-// ─── ONE-TIME MIGRATION (delete after running once) ───
+// ─── ONE-TIME MIGRATION ───
 app.post('/migrate/fix-visibility', async (req, res) => {
   try {
     const result = await Product.updateMany(
@@ -439,8 +401,7 @@ app.patch('/products/:id', upload.single('tileImage'), async (req, res) => {
   try {
     let updateData = { ...req.body };
 
-    // 1. Parse stringified array from FormData if it exists
-   if (req.body.userIndustry !== undefined) {
+    if (req.body.userIndustry !== undefined) {
       updateData.userIndustry = safeParseJSON(req.body.userIndustry);
     }
     if (req.body.applicationArea !== undefined) {
@@ -449,7 +410,6 @@ app.patch('/products/:id', upload.single('tileImage'), async (req, res) => {
     if (req.body.tags !== undefined) {
       updateData.tags = safeParseJSON(req.body.tags);
     }
-    // 2. If a new file is provided, upload it to Cloudinary and update the image property
     if (req.file) {
       console.log(`🔄 Uploading new image asset for product ID: ${req.params.id}...`);
       const imageUrl = await uploadToCloudinary(req.file.buffer, 'wonderfloor/tiles');
@@ -498,12 +458,10 @@ app.patch('/rooms/:id', upload.fields([
   try {
     let updateData = { ...req.body };
 
-    // 1. Parse stringified arrays back into real arrays
     if (req.body.supportedCollections) {
       updateData.supportedCollections = JSON.parse(req.body.supportedCollections);
     }
 
-    // 2. Upload new Base Room Image to Cloudinary if provided
     if (req.files && req.files.previewImage) {
       console.log(`🔄 Uploading new base image for room ID: ${req.params.id}...`);
       const previewUrl = await uploadToCloudinary(
@@ -514,7 +472,6 @@ app.patch('/rooms/:id', upload.fields([
       updateData.previewUrl = previewUrl;
     }
 
-    // 3. Upload new Mask Image to Cloudinary if provided
     if (req.files && req.files.maskImage) {
       console.log(`🔄 Uploading new mask image for room ID: ${req.params.id}...`);
       const maskUrl = await uploadToCloudinary(
@@ -525,7 +482,6 @@ app.patch('/rooms/:id', upload.fields([
       updateData.maskUrl = maskUrl;
     }
 
-    // 4. Save to Database
     const updatedRoom = await Room.findByIdAndUpdate(
       req.params.id,
       { $set: updateData },
@@ -561,8 +517,17 @@ app.delete('/rooms/:id', async (req, res) => {
   }
 });
 
+
+// 🚨 EXACT CHANGE 2: Serve compiled client-side static application files from the 'dist' build directory
+app.use(express.static(path.join(__dirname, 'dist')));
+
+// 🚨 EXACT CHANGE 3: Wildcard route catching deep linked path refreshes and returning index.html
+app.get('*', (req, res) => {
+  res.sendFile(path.join(__dirname, 'dist', 'index.html'));
+});
+
+
 // ─── MULTER & GLOBAL ERROR HANDLER ───
-// Must come after all routes so Express treats it as an error-handling middleware
 app.use((err, req, res, next) => {
   if (err instanceof multer.MulterError) {
     if (err.code === 'LIMIT_FILE_SIZE') {
@@ -570,12 +535,8 @@ app.use((err, req, res, next) => {
     }
     return res.status(400).json({ error: `Upload error: ${err.message}` });
   }
-  // Pass any other errors down to Express's default handler
   next(err);
 });
-
-// ─── MUST ALWAYS BE THE VERY LAST LINE ───
-module.exports = app;
 
 // ─── MUST ALWAYS BE THE VERY LAST LINE ───
 module.exports = app;
