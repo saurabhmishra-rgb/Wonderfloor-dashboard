@@ -82,6 +82,11 @@ app.use(async (req, res, next) => {
 const authRoutes = require('./routes/auth');
 app.use('/auth', authRoutes);
 
+// ✅ ADD THIS LINE: Mounts your new bulk upload file under the '/upload' prefix path
+// Require the file with its new name
+const bulkUploadRoutes = require('./routes/bulkTileUpload');
+app.use('/upload', bulkUploadRoutes);
+
 // ─── CLOUDINARY CONNECTION TEST ───
 cloudinary.api.ping()
   .then(res => {
@@ -574,9 +579,8 @@ app.use((err, req, res, next) => {
   next(err);
 });
 
-const path = require('path');
-
-
+// ─── MUST ALWAYS BE THE VERY LAST LINE ───
+module.exports = app;
 
 // ─── MUST ALWAYS BE THE VERY LAST LINE ───
 module.exports = app;
