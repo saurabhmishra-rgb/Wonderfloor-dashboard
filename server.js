@@ -574,7 +574,15 @@ app.use((err, req, res, next) => {
   next(err);
 });
 
+const path = require('path');
 
+// Serve static frontend build
+app.use(express.static(path.join(__dirname, 'build'))); // or 'dist'
+
+// ✅ SPA catch-all — must come AFTER all API routes
+app.get('*', (req, res) => {
+  res.sendFile(path.join(__dirname, 'build', 'index.html'));
+});
 
 // ─── MUST ALWAYS BE THE VERY LAST LINE ───
 module.exports = app;
