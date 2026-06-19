@@ -90,9 +90,9 @@ app.use('/upload', bulkUploadRoutes);
 // ─── CLOUDINARY CONNECTION TEST ───
 cloudinary.api.ping()
   .then(res => {
-    if (res.status === 'ok') console.log('✅ Connected to Cloudinary');
+    if (res.status === 'ok') console.log(' Connected to Cloudinary');
   })
-  .catch(err => console.error('❌ Cloudinary connection error:', err.message));
+  .catch(err => console.error(' Cloudinary connection error:', err.message));
 
 
 // ✅ FIX 3: Replaced base64 helper with upload_stream.
@@ -334,17 +334,14 @@ app.get('/rooms/:id', async (req, res) => {
   }
 });
 
-
-// ══════════════════════════════════════════════
-//  DASHBOARD STATS ROUTE
-// ══════════════════════════════════════════════
-
 app.get('/dashboard-stats', async (req, res) => {
   try {
+    const limit = parseInt(req.query.limit) || 15;
+
     const roomCount = await Room.countDocuments();
     const productCount = await Product.countDocuments();
 
-    const recentRooms = await Room.find().sort({ createdAt: -1 }).limit(3).lean();
+    const recentRooms = await Room.find().sort({ createdAt: -1 }).limit(limit).lean();
     const formattedRooms = recentRooms.map(r => ({
       id: r._id,
       name: r.name,
@@ -355,7 +352,7 @@ app.get('/dashboard-stats', async (req, res) => {
       createdAt: r.createdAt
     }));
 
-    const recentProducts = await Product.find().sort({ createdAt: -1 }).limit(3).lean();
+    const recentProducts = await Product.find().sort({ createdAt: -1 }).limit(limit).lean();
     const formattedProducts = recentProducts.map(p => ({
       id: p._id,
       name: p.name,
@@ -368,7 +365,7 @@ app.get('/dashboard-stats', async (req, res) => {
 
     const recentUploads = [...formattedRooms, ...formattedProducts]
       .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
-      .slice(0, 4);
+      .slice(0, limit);
 
     res.status(200).json({
       stats: {
@@ -383,7 +380,6 @@ app.get('/dashboard-stats', async (req, res) => {
     res.status(500).json({ error: 'Failed to fetch dashboard stats' });
   }
 });
-
 
 // ─── LOCAL DEV SERVER ───
 if (process.env.NODE_ENV !== 'production') {
