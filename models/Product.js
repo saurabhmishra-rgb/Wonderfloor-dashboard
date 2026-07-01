@@ -25,7 +25,11 @@ const productSchema = new mongoose.Schema({
 
   // ── VISIBILITY FLAG ──
   isVisible: { type: Boolean, default: true },
+  //  ADD THIS FIELD FOR DRAG AND DROP SORTING 
+order: { type: Number, default: 0 },
+  collectionTierOrder: { type: Number, default: 0 },
 
 }, { timestamps: true });
 
-module.exports = mongoose.model('Product', productSchema);
+
+module.exports = mongoose.model('Product', productSchema);// 👇 ADD THIS LINE FOR DRAG AND DROP COLLECTION ACCORDION SORTING 👇
