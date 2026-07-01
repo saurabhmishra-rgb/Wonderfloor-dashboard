@@ -247,22 +247,57 @@ app.get('/products/:id', async (req, res) => {
 // Flips isVisible between true ↔ false for a single product.
 // Old documents that pre-date this field will have isVisible=undefined,
 // which we treat as true (visible), so the first toggle correctly hides them.
-app.patch('/products/:id/visibility', async (req, res) => {
+
+// ─── REORDER PRODUCTS (DRAG & DROP SYNC) ───
+app.patch('/products/reorder', async (req, res) => {
   try {
-    const product = await Product.findById(req.params.id);
-    if (!product) {
-      return res.status(404).json({ error: 'Product not found' });
+    const { orderedIds } = req.body;
+    
+    if (!Array.isArray(orderedIds)) {
+      return res.status(400).json({ error: 'Invalid sequence parameters. Expected an array of IDs.' });
     }
-    product.isVisible = product.isVisible === false ? true : false;
-    await product.save();
-    console.log(`👁 "${product.name}" visibility → ${product.isVisible}`);
-    res.status(200).json({ success: true, id: product._id, name: product.name, isVisible: product.isVisible });
-  } catch (error) {
-    console.error("Visibility toggle error:", error);
-    res.status(500).json({ error: 'Failed to update product visibility' });
+
+    // Map through the array and update the 'order' field for each product ID
+    const updatePromises = orderedIds.map((id, index) => {
+      return Product.findByIdAndUpdate(id, { order: index });
+    });
+
+    await Promise.all(updatePromises);
+    
+    console.log(`🔄 Product catalog successfully reordered.`);
+    res.status(200).json({ success: true, message: 'Catalog order updated successfully.' });
+  } catch (err) {
+    console.error("Reorder error:", err);
+    res.status(500).json({ error: 'Database error while updating sequence.' });
   }
 });
+// ─── REORDER COLLECTIONS (ACCORDIONS) ───
+app.patch('/products/collections/reorder', async (req, res) => {
+  try {
+    const { orderedCollections } = req.body;
+    
+    if (!Array.isArray(orderedCollections)) {
+      return res.status(400).json({ error: 'Expected an array of collection names.' });
+    }
 
+    // Update every product matching that collection name with an index weight multiplier
+    // This shifts all items in that collection to the correct order tier
+    const updatePromises = orderedCollections.map((collectionName, index) => {
+      return Product.updateMany(
+        { accordionCategory: collectionName },
+        { $set: { collectionTierOrder: index } } // Multiplier order weight field
+      );
+    });
+
+    await Promise.all(updatePromises);
+    
+    console.log(`📦 Collections successfully reordered in the database.`);
+    res.status(200).json({ success: true, message: 'Collection group tiering order updated successfully.' });
+  } catch (err) {
+    console.error("Collection reorder error:", err);
+    res.status(500).json({ error: 'Database error while shifting collection weights.' });
+  }
+});
 
 // ══════════════════════════════════════════════
 //  ROOM ROUTES
@@ -440,6 +475,9 @@ app.patch('/products/:id', upload.single('tileImage'), async (req, res) => {
   try {
     let updateData = { ...req.body };
 
+     if (updateData.productOrder !== undefined) {
+      console.log(`📑 Sorting product ${req.params.id} → productOrder: ${updateData.productOrder}`);
+    }
     // 1. Parse stringified array from FormData if it exists
    if (req.body.userIndustry !== undefined) {
       updateData.userIndustry = safeParseJSON(req.body.userIndustry);
@@ -457,16 +495,24 @@ app.patch('/products/:id', upload.single('tileImage'), async (req, res) => {
       updateData.img = imageUrl;
     }
 
+    // const updatedProduct = await Product.findByIdAndUpdate(
+    //   req.params.id,
+    //   updateData,
+    //   { returnDocument: 'after' }
+    // );
+
     const updatedProduct = await Product.findByIdAndUpdate(
-      req.params.id,
-      updateData,
-      { returnDocument: 'after' }
-    );
+  req.params.id,
+  updateData,
+  { returnDocument: 'after', runValidators: true }
+);
 
     if (!updatedProduct) {
       return res.status(404).json({ error: 'Product not found' });
     }
-
+        if (updateData.productOrder !== undefined) {
+      console.log(`✅ Sort product successfully — ${updatedProduct.name} now has productOrder: ${updatedProduct.productOrder}`);
+    }
     res.status(200).json(updatedProduct);
   } catch (error) {
     console.error("Update product error:", error);
