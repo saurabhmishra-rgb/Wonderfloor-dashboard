@@ -621,8 +621,7 @@ app.use((err, req, res, next) => {
   next(err);
 });
 
-// ─── MUST ALWAYS BE THE VERY LAST LINE ───
-module.exports = app;
+
 
 // ─── MUST ALWAYS BE THE VERY LAST LINE ───
 module.exports = app;
