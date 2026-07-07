@@ -6,6 +6,8 @@ const roomSchema = new mongoose.Schema({
   previewUrl: { type: String, required: true },
   maskUrl: { type: String },
   isLive: { type: Boolean, default: false }, // ← ADD THIS
+  position: { type: Number, default: 0 },
+  categoryOrder: { type: Number, default: 0 }
 }, { timestamps: true });
 
 module.exports = mongoose.model('Room', roomSchema);
