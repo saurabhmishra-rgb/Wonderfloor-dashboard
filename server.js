@@ -337,7 +337,8 @@ app.post('/upload/room', upload.fields([
       category: req.body.category,
       supportedCollections: collections,
       previewUrl: previewUrl,
-      maskUrl: maskUrl
+      maskUrl: maskUrl,
+      position: currentRoomsCount
     });
     await newRoom.save();
 
@@ -348,16 +349,71 @@ app.post('/upload/room', upload.fields([
   }
 });
 
+
 // ─── FETCH ALL ROOMS ───
+// ─── FETCH ALL ROOMS (UPDATE THIS IN SERVER.JS) ───
 app.get('/rooms', async (req, res) => {
   try {
-    const rooms = await Room.find().sort({ createdAt: -1 });
+    // ✅ FIX: Pehle categoryOrder (1, 2, 3...) aur fir card position ke hisab se double-sort karein
+    const rooms = await Room.find().sort({ categoryOrder: 1, position: 1 });
     res.status(200).json(rooms);
   } catch (error) {
     res.status(500).json({ error: 'Failed to fetch rooms' });
   }
 });
 
+// 📦 ─── SAFE ROOM CATEGORIES REORDER (REPLACE THIS IN SERVER.JS) ───
+app.patch('/rooms/categories/reorder', async (req, res) => {
+  try {
+    const { orderedCategories } = req.body;
+    console.log('📥 Received orderedCategories:', orderedCategories); // 👈 ADD THIS
+
+    if (!orderedCategories || !Array.isArray(orderedCategories)) {
+      return res.status(400).json({ error: 'Invalid payload.' });
+    }
+
+    const updatePromises = orderedCategories.map((categoryName, index) => {
+      return Room.updateMany(
+        { category: categoryName },
+        { $set: { categoryOrder: index } }
+      ).then(result => {
+        console.log(`✅ "${categoryName}" → categoryOrder ${index} | matched: ${result.matchedCount}, modified: ${result.modifiedCount}`); // 👈 ADD THIS
+        return result;
+      }).catch(err => {
+        console.error(`Failed to update category weight for ${categoryName}:`, err);
+        return null;
+      });
+    });
+
+    await Promise.all(updatePromises);
+    return res.status(200).json({ success: true });
+  } catch (err) {
+    return res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// 🔄 ROOMS REORDER ENDPOINT (UPDATE THIS IN SERVER.JS)
+app.patch('/rooms/reorder', async (req, res) => {
+  const { orderedIds } = req.body;
+  try {
+    if (!Array.isArray(orderedIds)) {
+      return res.status(400).json({ error: 'Expected an array of IDs.' });
+    }
+
+    // findByIdAndUpdate use karenge kyunki yeh string IDs ko automatic cast kar leta hai
+    const updatePromises = orderedIds.map((id, index) => {
+      return Room.findByIdAndUpdate(id, { position: index });
+    });
+
+    await Promise.all(updatePromises);
+    
+    console.log(`🔄 Rooms sequence successfully updated in DB.`);
+    res.status(200).json({ success: true, message: "Sequence updated successfully!" });
+  } catch (err) {
+    console.error("Error inside rooms reorder route:", err);
+    res.status(500).json({ error: err.message });
+  }
+});
 // ─── FETCH SINGLE ROOM BY ID ───
 app.get('/rooms/:id', async (req, res) => {
   try {
@@ -415,6 +471,7 @@ app.get('/dashboard-stats', async (req, res) => {
     res.status(500).json({ error: 'Failed to fetch dashboard stats' });
   }
 });
+
 
 // ─── LOCAL DEV SERVER ───
 if (process.env.NODE_ENV !== 'production') {
@@ -621,7 +678,21 @@ app.use((err, req, res, next) => {
   next(err);
 });
 
-
+// app.put('/rooms/reorder', async (req, res) => {
+//   const { orderedIds } = req.body;
+//   try {
+//     const bulkOperations = orderedIds.map((id, index) => ({
+//       updateOne: {
+//         filter: { _id: id },
+//         update: { $set: { position: index } }
+//       }
+//     }));
+//     await Room.bulkWrite(bulkOperations); // Standard direct single parallel execution hit
+//     res.status(200).json({ success: true, message: "Sequence updated successfully!" });
+//   } catch (err) {
+//     res.status(500).json({ error: err.message });
+//   }
+// });
 
 // ─── MUST ALWAYS BE THE VERY LAST LINE ───
 module.exports = app;
