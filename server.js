@@ -313,6 +313,10 @@ app.post('/upload/room', upload.fields([
       return res.status(400).json({ error: 'Base image is required' });
     }
 
+
+
+    const currentRoomsCount = await Room.countDocuments();
+
     const previewUrl = await uploadToCloudinary(
       req.files.baseImage[0].buffer,
       'wonderfloor/rooms',
@@ -436,8 +440,8 @@ app.get('/dashboard-stats', async (req, res) => {
     const formattedRooms = recentRooms.map(r => ({
       id: r._id,
       name: r.name,
-      thumb: r.previewUrl,
-      file: r.previewUrl.split('/').pop().split('?')[0],
+      thumb: r.previewUrl || null,
+      file: r.previewUrl ? r.previewUrl.split('/').pop().split('?')[0] : 'no-image',
       type: 'Room',
       category: r.category,
       createdAt: r.createdAt
@@ -447,8 +451,8 @@ app.get('/dashboard-stats', async (req, res) => {
     const formattedProducts = recentProducts.map(p => ({
       id: p._id,
       name: p.name,
-      thumb: p.img,
-      file: p.img.split('/').pop().split('?')[0],
+      thumb: p.img || null,
+      file: p.img ? p.img.split('/').pop().split('?')[0] : 'no-image',
       type: 'Tile',
       category: p.accordionCategory || p.navCategory,
       createdAt: p.createdAt
@@ -471,7 +475,6 @@ app.get('/dashboard-stats', async (req, res) => {
     res.status(500).json({ error: 'Failed to fetch dashboard stats' });
   }
 });
-
 
 // ─── LOCAL DEV SERVER ───
 if (process.env.NODE_ENV !== 'production') {
