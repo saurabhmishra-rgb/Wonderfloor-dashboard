@@ -28,7 +28,7 @@ function safeParseJSON(data) {
 }
 
 // Configure Cloudinary
-// ✅ FIX 1: Added timeout — prevents the 499 TimeoutError on large files
+//  FIX 1: Added timeout — prevents the 499 TimeoutError on large files
 cloudinary.config({
   cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
   api_key: process.env.CLOUDINARY_API_KEY,
@@ -36,7 +36,7 @@ cloudinary.config({
   timeout: 120_000, // 120 s — gives Cloudinary enough time even on slow connections
 });
 
-// ✅ FIX 2: Added fileSize limit to multer so oversized files are rejected fast
+//  FIX 2: Added fileSize limit to multer so oversized files are rejected fast
 //    rather than timing out silently after a long upload.
 //    10 MB is generous for a tile texture; adjust down if you want stricter enforcement.
 const storage = multer.memoryStorage();
@@ -82,10 +82,14 @@ app.use(async (req, res, next) => {
 const authRoutes = require('./routes/auth');
 app.use('/auth', authRoutes);
 
-// ✅ ADD THIS LINE: Mounts your new bulk upload file under the '/upload' prefix path
+// ADD THIS LINE: Mounts your new bulk upload file under the '/upload' prefix path
 // Require the file with its new name
 const bulkUploadRoutes = require('./routes/bulkTileUpload');
 app.use('/upload', bulkUploadRoutes);
+
+// lead file import here in server
+const leadRoutes = require('./routes/lead');
+app.use('/leads', leadRoutes);
 
 // ─── CLOUDINARY CONNECTION TEST ───
 cloudinary.api.ping()
