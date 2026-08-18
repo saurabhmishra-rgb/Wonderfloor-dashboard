@@ -1,10 +1,11 @@
+// routes/leads.js
 const express = require('express');
 const router = express.Router();
 const Lead = require('../models/Lead');
 
 // ── CREATE / UPDATE ──
-// Agar phone number pehle se exist karta hai to duplicate row nahi banega,
-// existing lead hi update ho jayegi bas kewal ye Product aur count update hoga
+// Agar phone number pehle se exist karta hai to duplicate row nahi banegi,
+// existing lead hi update ho jayegi (naya product + downloadCount++)
 router.post('/', async (req, res) => {
   try {
     const { phone, name, email, message, productName, productSku, roomId } = req.body;
@@ -17,6 +18,7 @@ router.post('/', async (req, res) => {
 
     if (lead) {
       lead.email = email || lead.email;
+      lead.message = message || lead.message;
       lead.productName = productName || lead.productName;
       lead.productSku = productSku || lead.productSku;
       lead.roomId = roomId || lead.roomId;
