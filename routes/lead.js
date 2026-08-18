@@ -58,4 +58,27 @@ router.patch('/:id', async (req, res) => {
   }
 });
 
+// ── DELETE single lead ──
+router.delete('/:id', async (req, res) => {
+  try {
+    const deleted = await Lead.findByIdAndDelete(req.params.id);
+    if (!deleted) {
+      return res.status(404).json({ success: false, error: 'Lead not found.' });
+    }
+    res.json({ success: true, deletedId: req.params.id });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// ── DELETE all leads ──
+router.delete('/', async (req, res) => {
+  try {
+    const result = await Lead.deleteMany({});
+    res.json({ success: true, deletedCount: result.deletedCount });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
 module.exports = router;
