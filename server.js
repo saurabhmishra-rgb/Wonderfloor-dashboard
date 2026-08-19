@@ -18,7 +18,7 @@ app.use(express.urlencoded({ extended: true }));
 
 function safeParseJSON(data) {
   if (!data) return [];
-  if (typeof data !== 'string') return data; 
+  if (typeof data !== 'string') return data;
   try {
     return JSON.parse(data);
   } catch (error) {
@@ -28,7 +28,7 @@ function safeParseJSON(data) {
 }
 
 // Configure Cloudinary
-//  FIX 1: Added timeout — prevents the 499 TimeoutError on large files
+// ✅ FIX 1: Added timeout — prevents the 499 TimeoutError on large files
 cloudinary.config({
   cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
   api_key: process.env.CLOUDINARY_API_KEY,
@@ -36,7 +36,7 @@ cloudinary.config({
   timeout: 120_000, // 120 s — gives Cloudinary enough time even on slow connections
 });
 
-//  FIX 2: Added fileSize limit to multer so oversized files are rejected fast
+// ✅ FIX 2: Added fileSize limit to multer so oversized files are rejected fast
 //    rather than timing out silently after a long upload.
 //    10 MB is generous for a tile texture; adjust down if you want stricter enforcement.
 const storage = multer.memoryStorage();
@@ -190,13 +190,13 @@ app.post('/upload/product', upload.single('tileImage'), async (req, res) => {
     const applicationArea = safeParseJSON(req.body.applicationArea);
     const tagsArray = safeParseJSON(req.body.tags);
     // 👆 ---------------------- 👆
-    
+
     const { imageUrl: _ignored, ...restBody } = req.body;
 
     const newProduct = new Product({
       ...restBody,
       userIndustry: industries,
-      applicationArea: applicationArea, 
+      applicationArea: applicationArea,
       tags: tagsArray,
       img: imageUrl,
     });
@@ -256,7 +256,7 @@ app.get('/products/:id', async (req, res) => {
 app.patch('/products/reorder', async (req, res) => {
   try {
     const { orderedIds } = req.body;
-    
+
     if (!Array.isArray(orderedIds)) {
       return res.status(400).json({ error: 'Invalid sequence parameters. Expected an array of IDs.' });
     }
@@ -267,7 +267,7 @@ app.patch('/products/reorder', async (req, res) => {
     });
 
     await Promise.all(updatePromises);
-    
+
     console.log(`🔄 Product catalog successfully reordered.`);
     res.status(200).json({ success: true, message: 'Catalog order updated successfully.' });
   } catch (err) {
@@ -279,7 +279,7 @@ app.patch('/products/reorder', async (req, res) => {
 app.patch('/products/collections/reorder', async (req, res) => {
   try {
     const { orderedCollections } = req.body;
-    
+
     if (!Array.isArray(orderedCollections)) {
       return res.status(400).json({ error: 'Expected an array of collection names.' });
     }
@@ -294,7 +294,7 @@ app.patch('/products/collections/reorder', async (req, res) => {
     });
 
     await Promise.all(updatePromises);
-    
+
     console.log(`📦 Collections successfully reordered in the database.`);
     res.status(200).json({ success: true, message: 'Collection group tiering order updated successfully.' });
   } catch (err) {
@@ -414,7 +414,7 @@ app.patch('/rooms/reorder', async (req, res) => {
     });
 
     await Promise.all(updatePromises);
-    
+
     console.log(`🔄 Rooms sequence successfully updated in DB.`);
     res.status(200).json({ success: true, message: "Sequence updated successfully!" });
   } catch (err) {
@@ -538,16 +538,22 @@ app.patch('/rooms/bulk-toggle-live', async (req, res) => {
 app.patch('/products/:id', upload.single('tileImage'), async (req, res) => {
   try {
     let updateData = { ...req.body };
+     // widthMM/heightMM optional fields hain — agar form empty chhoda gaya toh
+    // frontend se '' (empty string) aata hai. Mongoose Number field me empty
+    // string save karne ki koshish karega toh cast error dega, isliye
+    // empty string ko update data se hata rahe hain (field simply ignore ho jayega)
+    if (updateData.widthMM === '') delete updateData.widthMM;
+    if (updateData.heightMM === '') delete updateData.heightMM;
 
-     if (updateData.productOrder !== undefined) {
+    if (updateData.productOrder !== undefined) {
       console.log(`📑 Sorting product ${req.params.id} → productOrder: ${updateData.productOrder}`);
     }
     // 1. Parse stringified array from FormData if it exists
-   if (req.body.userIndustry !== undefined) {
+    if (req.body.userIndustry !== undefined) {
       updateData.userIndustry = safeParseJSON(req.body.userIndustry);
     }
     if (req.body.applicationArea !== undefined) {
-      updateData.applicationArea = safeParseJSON(req.body.applicationArea); 
+      updateData.applicationArea = safeParseJSON(req.body.applicationArea);
     }
     if (req.body.tags !== undefined) {
       updateData.tags = safeParseJSON(req.body.tags);
@@ -565,16 +571,16 @@ app.patch('/products/:id', upload.single('tileImage'), async (req, res) => {
     //   { returnDocument: 'after' }
     // );
 
-    const updatedProduct = await Product.findByIdAndUpdate(
-  req.params.id,
-  updateData,
-  { returnDocument: 'after', runValidators: true }
-);
+      const updatedProduct = await Product.findByIdAndUpdate(
+      req.params.id,
+      updateData,
+      { new: true, runValidators: true }
+    );
 
     if (!updatedProduct) {
       return res.status(404).json({ error: 'Product not found' });
     }
-        if (updateData.productOrder !== undefined) {
+    if (updateData.productOrder !== undefined) {
       console.log(`✅ Sort product successfully — ${updatedProduct.name} now has productOrder: ${updatedProduct.productOrder}`);
     }
     res.status(200).json(updatedProduct);
