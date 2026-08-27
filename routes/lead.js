@@ -2,7 +2,7 @@
 const express = require('express');
 const router = express.Router();
 const Lead = require('../models/Lead');
-
+const Download = require('../models/Download'); 
 // ── CREATE / UPDATE ──
 // Agar phone number pehle se exist karta hai to duplicate row nahi banegi,
 // existing lead hi update ho jayegi (naya product + downloadCount++)
@@ -25,11 +25,19 @@ router.post('/', async (req, res) => {
       lead.lastSeenAt = new Date();
       lead.downloadCount += 1;
       await lead.save();
+
+      // product-wise tracking ke liye
+      await Download.create({ name, phone, productName, productSku, roomId });
+
       return res.json({ success: true, lead, isNew: false });
     }
 
     lead = await Lead.create({ name, phone, email, message, productName, productSku, roomId });
     console.log(` New lead captured: ${lead.name} (${lead.phone})`);
+
+    // pehli download bhi log karo
+    await Download.create({ name, phone, productName, productSku, roomId });
+
     res.status(201).json({ success: true, lead, isNew: true });
 
   } catch (error) {
@@ -37,7 +45,6 @@ router.post('/', async (req, res) => {
     res.status(500).json({ success: false, error: error.message });
   }
 });
-
 // ── READ ALL (Settings.jsx / dashboard ke liye) ──
 router.get('/', async (req, res) => {
   try {
@@ -81,4 +88,18 @@ router.delete('/', async (req, res) => {
   }
 });
 
+// product-wise accurate count
+router.get('/downloads/top', async (req, res) => {
+  try {
+    const results = await Download.aggregate([
+      { $group: { _id: '$productName', count: { $sum: 1 } } },
+      { $sort: { count: -1 } },
+      // { $limit: 5 },
+    ]);
+    const formatted = results.map(r => ({ name: r._id || 'Unknown product', count: r.count }));
+    res.json({ success: true, topDownloads: formatted });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
 module.exports = router;
