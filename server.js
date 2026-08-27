@@ -90,7 +90,9 @@ app.use('/upload', bulkUploadRoutes);
 // lead file import here in server
 const leadRoutes = require('./routes/lead');
 app.use('/leads', leadRoutes);
-
+// for Google Analytics page
+const analyticsRoutes = require('./routes/analytics');
+app.use('/analytics', analyticsRoutes);
 // ─── CLOUDINARY CONNECTION TEST ───
 cloudinary.api.ping()
   .then(res => {
@@ -581,7 +583,7 @@ app.patch('/products/:id', upload.single('tileImage'), async (req, res) => {
       return res.status(404).json({ error: 'Product not found' });
     }
     if (updateData.productOrder !== undefined) {
-      console.log(`✅ Sort product successfully — ${updatedProduct.name} now has productOrder: ${updatedProduct.productOrder}`);
+      console.log(` Sort product successfully — ${updatedProduct.name} now has productOrder: ${updatedProduct.productOrder}`);
     }
     res.status(200).json(updatedProduct);
   } catch (error) {
