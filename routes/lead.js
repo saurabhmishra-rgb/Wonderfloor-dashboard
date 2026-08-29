@@ -72,6 +72,8 @@ router.delete('/:id', async (req, res) => {
     if (!deleted) {
       return res.status(404).json({ success: false, error: 'Lead not found.' });
     }
+     //Is lead ke phone se juda download history bhi saaf karo
+     await Download.deleteMany({ phone: deleted.phone });
     res.json({ success: true, deletedId: req.params.id });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
@@ -82,6 +84,7 @@ router.delete('/:id', async (req, res) => {
 router.delete('/', async (req, res) => {
   try {
     const result = await Lead.deleteMany({});
+    await Download.deleteMany({});  // saare leads delete ho rahe hain, toh download history bhi saaf karo
     res.json({ success: true, deletedCount: result.deletedCount });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
@@ -102,7 +105,7 @@ router.get('/downloads/top', async (req, res) => {
     res.status(500).json({ success: false, error: err.message });
   }
 });
-// yaha per phone numeber unique identity hai to uss case me ham phone number ko fetch karenge for download history to show pop_up historyff
+// yaha per phone numeber unique identity hai to uss case me ham phone number ko fetch karenge for download history to show pop_up history
 router.get('/downloads/:phone', async (req, res) => {
   try {
     const { phone } = req.params;
@@ -115,7 +118,26 @@ router.get('/downloads/:phone', async (req, res) => {
     res.status(500).json({ success: false, error: err.message });
   }
 });
+// Individual history delete karane ke liye inside pop_up and for more info ye LeadDownloadModal.jsx ek history hai jo Download event track karata hai
+router.delete('/downloads/entry/:downloadId', async (req, res) => {
+  try {
+    const deleted = await Download.findByIdAndDelete(req.params.downloadId);
+    if (!deleted) {
+      return res.status(404).json({ success: false, error: 'Download record not found.' });
+    }
+    res.json({ success: true, deletedId: req.params.downloadId });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
 
-module.exports = router;
-
+// ek lead ke saare download records ek saath delete karne ke liye (popup ka "Delete All History" button)
+router.delete('/downloads/:phone/all', async (req, res) => {
+  try {
+    const result = await Download.deleteMany({ phone: req.params.phone });
+    res.json({ success: true, deletedCount: result.deletedCount });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
 module.exports = router;
