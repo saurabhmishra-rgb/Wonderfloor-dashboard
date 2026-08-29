@@ -102,4 +102,20 @@ router.get('/downloads/top', async (req, res) => {
     res.status(500).json({ success: false, error: err.message });
   }
 });
+// yaha per phone numeber unique identity hai to uss case me ham phone number ko fetch karenge for download history to show pop_up historyff
+router.get('/downloads/:phone', async (req, res) => {
+  try {
+    const { phone } = req.params;
+    const downloads = await Download.find({ phone })
+      .sort({ createdAt: -1 })
+      .select('productName productSku createdAt');
+
+    res.json({ success: true, downloads });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+module.exports = router;
+
 module.exports = router;
